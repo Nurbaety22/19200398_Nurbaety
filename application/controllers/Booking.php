@@ -1,6 +1,10 @@
 <?php
 defined('BASEPATH') or exit('No Direct Script Access Allowed');
 date_default_timezone_set('Asia/Jakarta');
+require_once APPPATH . "third_party/dompdf/autoload.php";
+
+use Dompdf\Dompdf;
+
 class Booking extends CI_Controller
 {
     public function __construct()
@@ -98,6 +102,7 @@ class Booking extends CI_Controller
             redirect(base_url() . 'booking');
         }
     }
+
     public function bookingSelesai($where)
     {
         //mengupdate stok dan dibooking di tabel buku saat proses booking diselesaikan
@@ -106,16 +111,16 @@ class Booking extends CI_Controller
         $isibooking = [
             'id_booking' => $this->ModelBooking->kodeOtomatis('booking', 'id_booking'),
             'tgl_booking' => date('Y-m-d H:m:s'),
-            'batas_ambil' => date('Y-m-d', strtotime('+2 days', strtotime($tglsekarang))),
+            'batas_ambil' => date('Y-md', strtotime('+2 days', strtotime($tglsekarang))),
             'id_user' => $where
         ];
-
         //menyimpan ke tabel booking dan detail booking, dan mengosongkan tabel temporari
         $this->ModelBooking->insertData('booking', $isibooking);
         $this->ModelBooking->simpanDetail($where);
         $this->ModelBooking->kosongkanData('temp');
         redirect(base_url() . 'booking/info');
     }
+
     public function info()
     {
         $where = $this->session->userdata('id_user');
@@ -123,10 +128,34 @@ class Booking extends CI_Controller
         $data['judul'] = "Selesai Booking";
         $data['useraktif'] = $this->ModelUser->cekData(['id' => $this->session->userdata('id_user')])->result();
         $data['items'] = $this->db->query("select*from booking bo, booking_detail d, buku bu where d.id_booking=bo.id_booking and d.id_buku=bu.id and bo.id_user='$where'")->result_array();
-
         $this->load->view('templates/templates-user/header', $data);
         $this->load->view('booking/info-booking', $data);
-        $this->load->view('templates/templates-user/modal');
+        $this->load->view('templates/templates-user/modal', $data);
         $this->load->view('templates/templates-user/footer');
+    }
+
+    public function exportToPdf()
+    {
+        $id_user = $this->session->userdata('id_user');
+        $data['user'] = $this->session->userdata('nama');
+        $data['judul'] = "Cetak Bukti Booking";
+        $data['useraktif'] = $this->ModelUser->cekData(['id' => $this->session->userdata('id_user')])->result();
+        $data['items'] = $this->db->query("select*from booking bo, booking_detail d, buku bu where d.id_booking=bo.id_booking and d.id_buku=bu.id and bo.id_user='$id_user'")->result_array();
+
+        $this->load->view('booking/bukti-pdf', $data);
+
+        $paper_size = 'A4'; // ukuran kertas
+        $orientation = 'landscape'; //tipe format kertas potrait atau landscape
+        $html = $this->output->get_output();
+
+        $pdf = new Dompdf();
+
+        $pdf->setPaper($paper_size, $orientation);
+        $pdf->loadHtml($html);
+        $pdf->render();
+        $pdf->stream("bukti-booking-$id_user.pdf", [
+            'Attachment' => 0
+        ]);
+        // nama file pdf yang di hasilkan
     }
 }
